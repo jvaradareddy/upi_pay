@@ -1,5 +1,6 @@
-import 'dart:convert';
+// lib/src/discovery.dart
 
+import 'dart:convert';
 import 'package:universal_io/io.dart' as io;
 import 'package:upi_pay/src/platform_interface.dart';
 import 'package:upi_pay/types/applications.dart';
@@ -7,19 +8,19 @@ import 'package:upi_pay/types/discovery.dart';
 import 'package:upi_pay/types/status.dart';
 import 'package:upi_pay/types/meta.dart';
 
-class UpiApplicationDiscovery implements _PlatformDiscoveryBase {
-  final discovery = io.Platform.isAndroid
+class UpiApplicationDiscovery {
+  final _discovery = io.Platform.isAndroid
       ? _AndroidDiscovery()
       : io.Platform.isIOS
           ? _IosDiscovery()
           : null;
-  static final _singleton = UpiApplicationDiscovery._inner();
-  factory UpiApplicationDiscovery() {
-    return _singleton;
-  }
-  UpiApplicationDiscovery._inner();
 
-  @override
+  static final _singleton = UpiApplicationDiscovery._internal();
+
+  factory UpiApplicationDiscovery() => _singleton;
+
+  UpiApplicationDiscovery._internal();
+
   Future<List<ApplicationMeta>> discover({
     required Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
     UpiApplicationDiscoveryAppPaymentType paymentType =
@@ -27,10 +28,10 @@ class UpiApplicationDiscovery implements _PlatformDiscoveryBase {
     UpiApplicationDiscoveryAppStatusType statusType =
         UpiApplicationDiscoveryAppStatusType.working,
   }) async {
-    if (!(io.Platform.isAndroid || io.Platform.isIOS)) {
-      throw UnsupportedError('Discovery is available only on Android and iOS');
+    if (_discovery == null) {
+      throw UnsupportedError('Discovery is only supported on Android and iOS');
     }
-    return discovery!.discover(
+    return _discovery!.discover(
       applicationStatusMap: applicationStatusMap,
       paymentType: paymentType,
       statusType: statusType,
@@ -38,13 +39,15 @@ class UpiApplicationDiscovery implements _PlatformDiscoveryBase {
   }
 }
 
-class _AndroidDiscovery implements _PlatformDiscoveryBase {
-  static final _singleton = _AndroidDiscovery._inner();
-  factory _AndroidDiscovery() {
-    return _singleton;
-  }
-  _AndroidDiscovery._inner();
+abstract class _PlatformDiscoveryBase {
+  Future<List<ApplicationMeta>> discover({
+    required Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
+    UpiApplicationDiscoveryAppPaymentType paymentType,
+    UpiApplicationDiscoveryAppStatusType statusType,
+  });
+}
 
+class _AndroidDiscovery implements _PlatformDiscoveryBase {
   @override
   Future<List<ApplicationMeta>> discover({
     required Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
@@ -55,13 +58,13 @@ class _AndroidDiscovery implements _PlatformDiscoveryBase {
   }) async {
     final appsList = await UpiPayPlatform.instance.getInstalledUpiApps();
     if (appsList == null) return [];
+
     final List<ApplicationMeta> retList = [];
-    appsList.forEach((app) {
+
+    for (var app in appsList) {
       final packageName = _castToString(app['packageName']);
       final androidStatus = _getStatus(packageName, applicationStatusMap);
-      if (androidStatus == null) {
-        return null;
-      }
+      if (androidStatus == null) continue;
       if (_canUseApp(statusType, androidStatus)) {
         final icon = _castToString(app['icon']);
         final priority = _castToInt(app['priority']);
@@ -73,25 +76,23 @@ class _AndroidDiscovery implements _PlatformDiscoveryBase {
           preferredOrder,
         ));
       }
-    });
+    }
+
     return retList;
   }
 
-  UpiApplicationAndroidStatus? _getStatus(String packageName,
-      Map<UpiApplication, UpiApplicationStatus> applicationStatusMap) {
-    if (!UpiApplication.lookUpMap.containsKey(packageName)) {
-      return null;
-    }
+  UpiApplicationAndroidStatus? _getStatus(
+    String packageName,
+    Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
+  ) {
     final upiApp = UpiApplication.lookUpMap[packageName];
-    if (!applicationStatusMap.containsKey(upiApp)) {
-      return null;
-    }
-    final status = applicationStatusMap[upiApp]!;
-    return status.androidStatus;
+    return upiApp != null ? applicationStatusMap[upiApp]?.androidStatus : null;
   }
 
-  bool _canUseApp(UpiApplicationDiscoveryAppStatusType statusType,
-      UpiApplicationAndroidStatus androidStatus) {
+  bool _canUseApp(
+    UpiApplicationDiscoveryAppStatusType statusType,
+    UpiApplicationAndroidStatus androidStatus,
+  ) {
     if (androidStatus.setup == UpiApplicationSetupStatus.success &&
         androidStatus.linkingSupport == UpiApplicationLinkingSupport.shows) {
       switch (statusType) {
@@ -111,12 +112,6 @@ class _AndroidDiscovery implements _PlatformDiscoveryBase {
 }
 
 class _IosDiscovery implements _PlatformDiscoveryBase {
-  static final _singleton = _IosDiscovery._inner();
-  factory _IosDiscovery() {
-    return _singleton;
-  }
-  _IosDiscovery._inner();
-
   @override
   Future<List<ApplicationMeta>> discover({
     required Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
@@ -127,53 +122,37 @@ class _IosDiscovery implements _PlatformDiscoveryBase {
   }) async {
     Map<String, UpiApplication> discoveryMap = {};
     List<UpiApplication> discovered = [];
+
     applicationStatusMap.forEach((app, status) {
-      if (app.iosBundleId == null) return;
-      final iosStatus = _getStatus(app.iosBundleId!, applicationStatusMap);
-      if (iosStatus != null && _canUseApp(statusType, iosStatus)) {
-        if (app.discoveryCustomScheme != null) {
-          discoveryMap[app.discoveryCustomScheme!] = app;
-        } else {
-          discovered.add(app);
+      final bundleId = app.iosBundleId;
+      if (bundleId != null) {
+        final iosStatus = status.iosStatus;
+        if (iosStatus != null && _canUseApp(statusType, iosStatus)) {
+          if (app.discoveryCustomScheme != null) {
+            discoveryMap[app.discoveryCustomScheme!] = app;
+          } else {
+            discovered.add(app);
+          }
         }
       }
     });
-    final keys = discoveryMap.keys.toList();
-    for (int idx = 0; idx < discoveryMap.length; ++idx) {
-      final scheme = keys[idx];
+
+    for (var scheme in discoveryMap.keys) {
       try {
-        final bool? result = await UpiPayPlatform.instance.canLaunch(scheme);
-        // print('$scheme, launch-able: $result');
-        if (result == true) {
+        final canLaunch = await UpiPayPlatform.instance.canLaunch(scheme);
+        if (canLaunch == true) {
           discovered.add(discoveryMap[scheme]!);
         }
-      } catch (error, stack) {
-        // print('$scheme canLaunch error');
-        print(error);
-        print(stack);
-      }
+      } catch (_) {}
     }
+
     return discovered.map((app) => ApplicationMeta.ios(app)).toList();
   }
 
-  UpiApplicationIosStatus? _getStatus(String packageName,
-      Map<UpiApplication, UpiApplicationStatus> applicationStatusMap) {
-    if (!UpiApplication.lookUpMap.containsKey(packageName)) {
-      return null;
-    }
-    final upiApp = UpiApplication.lookUpMap[packageName]!;
-    if (!applicationStatusMap.containsKey(upiApp)) {
-      return null;
-    }
-    final status = applicationStatusMap[upiApp]!;
-    if (status.iosStatus == null) {
-      return null;
-    }
-    return status.iosStatus;
-  }
-
-  bool _canUseApp(UpiApplicationDiscoveryAppStatusType statusType,
-      UpiApplicationIosStatus iosStatus) {
+  bool _canUseApp(
+    UpiApplicationDiscoveryAppStatusType statusType,
+    UpiApplicationIosStatus iosStatus,
+  ) {
     if (iosStatus.setup == UpiApplicationSetupStatus.success &&
         iosStatus.linkingSupport == UpiApplicationLinkingSupport.shows) {
       switch (statusType) {
@@ -192,26 +171,12 @@ class _IosDiscovery implements _PlatformDiscoveryBase {
   }
 }
 
-abstract class _PlatformDiscoveryBase {
-  Future<List<ApplicationMeta>> discover({
-    required Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
-    UpiApplicationDiscoveryAppPaymentType paymentType =
-        UpiApplicationDiscoveryAppPaymentType.nonMerchant,
-    UpiApplicationDiscoveryAppStatusType statusType =
-        UpiApplicationDiscoveryAppStatusType.working,
-  });
-}
-
-String _castToString(dynamic val) {
-  if (val is String) {
-    return val;
-  }
+String _castToString(dynamic value) {
+  if (value is String) return value;
   throw TypeError();
 }
 
-int _castToInt(dynamic val) {
-  if (val is int) {
-    return val;
-  }
+int _castToInt(dynamic value) {
+  if (value is int) return value;
   throw TypeError();
 }
