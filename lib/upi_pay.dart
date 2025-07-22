@@ -12,7 +12,8 @@ export 'types/discovery.dart'
 export 'types/status.dart' show UpiApplicationStatus;
 export 'src/platform_interface.dart' show UpiPayPlatform;
 
-// Add a helper to access discovery via static method
+// Add this helper at bottom of the file:
+
 class UpiAppDiscoveryHelper {
   static Future<List<ApplicationMeta>> getInstalledUpiApplications({
     UpiApplicationDiscoveryAppPaymentType paymentType =
