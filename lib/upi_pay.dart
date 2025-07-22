@@ -2,7 +2,8 @@
 
 library upi_pay;
 
-export 'api.dart' show UpiPay;
+//export 'api.dart' show UpiPay;
+export 'src/upi_pay_main.dart';
 export 'src/discovery.dart' show UpiApplicationDiscovery;
 export 'types/applications.dart' show UpiApplication;
 export 'types/response.dart' show UpiTransactionResponse, UpiTransactionStatus;
@@ -11,8 +12,6 @@ export 'types/discovery.dart'
     show UpiApplicationDiscoveryAppStatusType, UpiApplicationDiscoveryAppPaymentType;
 export 'types/status.dart' show UpiApplicationStatus;
 export 'src/platform_interface.dart' show UpiPayPlatform;
-
-export 'src/upi_pay.dart';
 
 // Add this helper at bottom of the file:
 
