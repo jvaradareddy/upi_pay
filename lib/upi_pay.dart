@@ -12,6 +12,8 @@ export 'types/discovery.dart'
 export 'types/status.dart' show UpiApplicationStatus;
 export 'src/platform_interface.dart' show UpiPayPlatform;
 
+export 'src/upi_pay.dart';
+
 // Add this helper at bottom of the file:
 
 class UpiAppDiscoveryHelper {
