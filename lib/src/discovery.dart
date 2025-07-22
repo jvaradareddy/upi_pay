@@ -21,23 +21,20 @@ class UpiApplicationDiscovery {
 
   UpiApplicationDiscovery._internal();
 
-  Future<List<ApplicationMeta>> discover({
-    required Map<UpiApplication, UpiApplicationStatus> applicationStatusMap,
+  static Future<List<ApplicationMeta>> getInstalledUpiApplications({
     UpiApplicationDiscoveryAppPaymentType paymentType =
         UpiApplicationDiscoveryAppPaymentType.nonMerchant,
     UpiApplicationDiscoveryAppStatusType statusType =
         UpiApplicationDiscoveryAppStatusType.working,
   }) async {
-    if (_discovery == null) {
-      throw UnsupportedError('Discovery is only supported on Android and iOS');
-    }
-    return _discovery!.discover(
-      applicationStatusMap: applicationStatusMap,
+    final discovery = UpiApplicationDiscovery();
+    final statusMap = await UpiPayPlatform.instance.getStatusMap();
+    return discovery.discover(
+      applicationStatusMap: statusMap,
       paymentType: paymentType,
       statusType: statusType,
     );
   }
-}
 
 abstract class _PlatformDiscoveryBase {
   Future<List<ApplicationMeta>> discover({
