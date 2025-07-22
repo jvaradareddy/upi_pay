@@ -2,7 +2,7 @@
 
 library upi_pay;
 
-export 'src/api.dart' show UpiPay;
+export 'api.dart' show UpiPay;
 export 'src/discovery.dart' show UpiApplicationDiscovery;
 export 'types/applications.dart' show UpiApplication;
 export 'types/response.dart' show UpiTransactionResponse, UpiTransactionStatus;
